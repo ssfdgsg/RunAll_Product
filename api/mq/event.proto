@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package mq;
+
+option go_package = "product/api/mq;mq";
+
+import "google/protobuf/timestamp.proto";
+
+// 事件类型
+enum EventType {
+  UNKNOWN = 0;
+  INSTANCE_CREATED = 1;         // 创建实例
+  INSTANCE_DELETED = 2;         // 删除实例
+  INSTANCE_SPEC_CHANGED = 3;    // 规格变更（CPU/Memory/Image）
+  INSTANCE_IMAGE_REMOVED = 4;   // 镜像删除
+  INSTANCE_IMAGE_UPDATED = 5;   // 镜像更新
+  INSTANCE_STARTED = 6;         // 启动实例
+  INSTANCE_STOPPED = 7;         // 停止实例
+  INSTANCE_STATUS_CHANGED = 8;  // 实例状态变化（Running/Failed）
+  INSTANCE_K8S_SYNC = 9;        // K8s 状态回传
+  INSTANCE_NETWORK_UPDATED = 10; // 域名/网络更新
+}
+
+// 实例规格
+message InstanceSpec {
+  int32 cpus = 1;
+  int32 memory_mb = 2;
+  int32 gpu = 3;
+  string image = 4;
+}
+
+// 事件消息（与资源域保持一致）
+message Event {
+  string event_type = 1;                    // 事件类型（字符串格式）
+  int64 instance_id = 2;                    // 实例 ID
+  google.protobuf.Timestamp timestamp = 3;  // 时间戳
+  string user_id = 4;                       // 用户 ID（字符串格式，如 UUID）
+  string name = 5;                          // 实例名称
+  optional InstanceSpec spec = 6;           // 实例规格（可选）
+}

@@ -1,15 +1,21 @@
 server:
   http:
-    addr: 0.0.0.0:8000
+    addr: 0.0.0.0:8002
     timeout: 1s
   grpc:
-    addr: 0.0.0.0:9000
+    addr: 0.0.0.0:9002
     timeout: 1s
 data:
   database:
-    driver: mysql
-    source: root:root@tcp(127.0.0.1:3306)/test?parseTime=True&loc=Local
+    driver: postgresql
+    source: postgresql://postgres:123456@localhost:5433/product
   redis:
-    addr: 127.0.0.1:6379
+    addr: 172.27.59.28:6379
+    password: ""
+    db: 0
     read_timeout: 0.2s
     write_timeout: 0.2s
+  rabbitmq:
+    url: amqp://guest:guest@localhost:5672/
+    queue: resource.instance.created
+    exchange: resource.events

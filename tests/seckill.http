@@ -1,0 +1,110 @@
+### 秒杀服务 API 测试（gRPC）
+### 基础配置
+@grpcHost = localhost:9002
+
+###############################################
+### gRPC 接口测试
+###############################################
+
+### 1. 初始化秒杀活动
+GRPC {{grpcHost}}/api.product.v1.SeckillService/InitSeckill
+
+{
+  "product_id": 5,
+  "stock": 100
+}
+
+### 2. 获取当前秒杀信息
+GRPC {{grpcHost}}/api.product.v1.SeckillService/GetCurrentSeckill
+
+{}
+
+### 3. 清空秒杀数据
+GRPC {{grpcHost}}/api.product.v1.SeckillService/ClearSeckill
+
+{}
+
+###############################################
+### Redis 操作测试（使用 redis-cli）
+###############################################
+
+### 初始化秒杀（Redis 命令）
+# redis-cli -h 172.27.59.28 -p 6379
+# 
+# # 清空旧数据
+# DEL seckill:stock seckill:req_seq seckill:uid2req seckill:stream_orders seckill:product_id
+# 
+# # 设置新秒杀
+# SET seckill:product_id 1001
+# SET seckill:stock 100
+# SET seckill:req_seq 0
+
+### 查看当前秒杀状态
+# redis-cli -h 172.27.59.28 -p 6379
+# 
+# GET seckill:product_id
+# GET seckill:stock
+# GET seckill:req_seq
+
+### 模拟 BFF 扣库存（Lua 脚本）
+# redis-cli -h 172.27.59.28 -p 6379 --eval seckill.lua , user123
+# 
+# 脚本内容（seckill.lua）：
+# local uid = ARGV[1]
+# local stock_key = "seckill:stock"
+# local req_seq_key = "seckill:req_seq"
+# local uid2req_key = "seckill:uid2req"
+# local stream_key = "seckill:stream_orders"
+# local product_id_key = "seckill:product_id"
+# 
+# -- 检查是否已抢购
+# local existing_req = redis.call("HGET", uid2req_key, uid)
+# if existing_req then
+#   return {err = "already purchased"}
+# end
+# 
+# -- 扣库存
+# local stock = redis.call("DECR", stock_key)
+# if stock < 0 then
+#   redis.call("INCR", stock_key)
+#   return {err = "out of stock"}
+# end
+# 
+# -- 生成 req_id
+# local req_id = redis.call("INCR", req_seq_key)
+# 
+# -- 记录用户抢购
+# redis.call("HSET", uid2req_key, uid, req_id)
+# 
+# -- 获取商品ID
+# local product_id = redis.call("GET", product_id_key)
+# 
+# -- 推送到 Stream
+# redis.call("XADD", stream_key, "*", "uid", uid, "req_id", req_id, "product_id", product_id)
+# 
+# return {ok = req_id}
+
+### 查看 Stream 消息
+# redis-cli -h 172.27.59.28 -p 6379
+# 
+# XLEN seckill:stream_orders
+# XRANGE seckill:stream_orders - +
+# XREAD COUNT 10 STREAMS seckill:stream_orders 0
+
+### 消费 Stream 消息（模拟商品域消费者）
+# redis-cli -h 172.27.59.28 -p 6379
+# 
+# # 创建消费者组
+# XGROUP CREATE seckill:stream_orders product-service $ MKSTREAM
+# 
+# # 消费消息
+# XREADGROUP GROUP product-service consumer1 COUNT 1 BLOCK 2000 STREAMS seckill:stream_orders >
+# 
+# # 确认消息
+# XACK seckill:stream_orders product-service <message-id>
+
+### 查看用户抢购记录
+# redis-cli -h 172.27.59.28 -p 6379
+# 
+# HGETALL seckill:uid2req
+# HGET seckill:uid2req user123

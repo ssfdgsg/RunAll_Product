@@ -1,0 +1,149 @@
+### 商品服务 API 测试（gRPC）
+### 基础配置
+@grpcHost = localhost:9002
+
+###############################################
+### gRPC 接口测试
+###############################################
+
+### 1. 获取商品列表（无过滤）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{}
+
+### 2. 获取商品列表（价格过滤）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "min_price": 1000,
+  "max_price": 10000
+}
+
+### 3. 获取商品列表（按价格升序排序）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "sort_by": "SORT_BY_PRICE",
+  "sort_order": "ASC"
+}
+
+### 4. 获取商品列表（按价格降序排序）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "sort_by": "SORT_BY_PRICE",
+  "sort_order": "DESC"
+}
+
+### 5. 获取商品列表（按 CPU 排序）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "sort_by": "SORT_BY_CPU",
+  "sort_order": "DESC"
+}
+
+### 6. 获取商品列表（按内存排序）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "sort_by": "SORT_BY_MEMORY",
+  "sort_order": "DESC"
+}
+
+### 7. 获取商品列表（按 GPU 排序）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "sort_by": "SORT_BY_GPU",
+  "sort_order": "DESC"
+}
+
+### 8. 获取商品列表（分页 - 第1页，每页10条）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "page": 1,
+  "page_size": 10
+}
+
+### 9. 获取商品列表（分页 - 第2页，每页10条）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "page": 2,
+  "page_size": 10
+}
+
+### 10. 获取商品列表（组合查询：价格过滤 + 排序 + 分页）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "min_price": "5000",
+  "max_price": "50000",
+  "sort_by": "SORT_BY_PRICE",
+  "sort_order": "ASC",
+  "page": 1,
+  "page_size": 5
+}
+
+### 11. 获取商品列表（使用 FieldMask 只返回部分字段）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "mask": "name"
+}
+
+### 12. 获取商品列表（FieldMask 返回多个字段）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "mask": "id,name,price"
+}
+
+### 13. 获取商品列表（FieldMask + 过滤）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "min_price": "1000",
+  "mask": "name,price,spec"
+}
+
+### 14. 获取商品列表（FieldMask 返回 spec 的部分字段）
+GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
+
+{
+  "mask": "name,spec.cpu,spec.memory"
+}
+
+### 15. 创建商品（基础型）
+GRPC {{grpcHost}}/api.product.v1.ProductService/CreateProduct
+
+{
+  "name": "轻量型实例",
+  "description": "适合轻量级应用",
+  "price": "5500",
+  "spec": {
+    "cpu": 1,
+    "memory": 512,
+    "gpu": 0,
+    "image": "ubuntu:22.04",
+    "config_json": "{\"disk_type\":\"SSD\",\"disk_size\":50}"
+  }
+}
+
+### 16. 创建商品（GPU 型）
+GRPC {{grpcHost}}/api.product.v1.ProductService/CreateProduct
+
+{
+  "name": "GPU 计算型",
+  "description": "适合深度学习训练",
+  "price": 99900,
+  "spec": {
+    "cpu": 8,
+    "memory": 32768,
+    "gpu": 1,
+    "image": "nvidia/cuda:11.8.0-base-ubuntu22.04",
+    "config_json": "{\"disk_type\":\"SSD\",\"disk_size\":200,\"gpu_model\":\"A100\"}"
+  }
+}

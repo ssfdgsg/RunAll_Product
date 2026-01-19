@@ -3,19 +3,49 @@
 
 openapi: 3.0.3
 info:
-    title: Greeter API
-    description: The greeting service definition.
+    title: ""
     version: 0.0.1
 paths:
-    /helloworld/{name}:
+    /v1/instances:
         get:
             tags:
-                - Greeter
-                - subgroup
-            description: Sends a greeting
-            operationId: Greeter_SayHello
+                - InstanceService
+            description: List instances with filters
+            operationId: InstanceService_ListInstances
             parameters:
-                - name: name
+                - name: userId
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: uint32
+                - name: pageSize
+                  in: query
+                  schema:
+                    type: integer
+                    format: uint32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.product.v1.ListInstancesReply'
+    /v1/instances/{instanceId}:
+        get:
+            tags:
+                - InstanceService
+            description: Get instance by ID
+            operationId: InstanceService_GetInstance
+            parameters:
+                - name: instanceId
                   in: path
                   required: true
                   schema:
@@ -26,14 +56,203 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/helloworld.v1.HelloReply'
+                                $ref: '#/components/schemas/api.product.v1.GetInstanceReply'
+    /v1/orders/{orderId}/instance:
+        get:
+            tags:
+                - InstanceService
+            description: Get instance by order ID
+            operationId: InstanceService_GetInstanceByOrder
+            parameters:
+                - name: orderId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.product.v1.GetInstanceByOrderReply'
+    /v1/products:
+        get:
+            tags:
+                - ProductService
+            description: |-
+                List products with filters, sorting, pagination.
+                 FieldMask query format: mask.paths=name&mask.paths=spec.cpu
+            operationId: ProductService_ListProduct
+            parameters:
+                - name: minPrice
+                  in: query
+                  schema:
+                    type: string
+                - name: maxPrice
+                  in: query
+                  schema:
+                    type: string
+                - name: sortBy
+                  in: query
+                  schema:
+                    type: integer
+                    format: enum
+                - name: sortOrder
+                  in: query
+                  schema:
+                    type: integer
+                    format: enum
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: uint32
+                - name: pageSize
+                  in: query
+                  schema:
+                    type: integer
+                    format: uint32
+                - name: mask
+                  in: query
+                  schema:
+                    type: string
+                    format: field-mask
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.product.v1.ListProductReply'
+        post:
+            tags:
+                - ProductService
+            description: Create a new product with spec
+            operationId: ProductService_CreateProduct
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.product.v1.CreateProductReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.product.v1.CreateProductReply'
 components:
     schemas:
-        helloworld.v1.HelloReply:
+        api.product.v1.CreateProductReply:
             type: object
             properties:
-                message:
+                product:
+                    $ref: '#/components/schemas/api.product.v1.Product'
+        api.product.v1.CreateProductReq:
+            type: object
+            properties:
+                name:
                     type: string
-            description: The response message containing the greetings
+                description:
+                    type: string
+                price:
+                    type: string
+                spec:
+                    $ref: '#/components/schemas/api.product.v1.ProductSpec'
+        api.product.v1.GetInstanceByOrderReply:
+            type: object
+            properties:
+                instance:
+                    $ref: '#/components/schemas/api.product.v1.Instance'
+        api.product.v1.GetInstanceReply:
+            type: object
+            properties:
+                instance:
+                    $ref: '#/components/schemas/api.product.v1.Instance'
+        api.product.v1.Instance:
+            type: object
+            properties:
+                instanceId:
+                    type: string
+                userId:
+                    type: string
+                orderId:
+                    type: string
+                productId:
+                    type: string
+                productName:
+                    type: string
+                spec:
+                    $ref: '#/components/schemas/api.product.v1.ProductSpec'
+                status:
+                    type: string
+                createdAt:
+                    type: string
+            description: Instance messages
+        api.product.v1.ListInstancesReply:
+            type: object
+            properties:
+                instances:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.product.v1.Instance'
+                page:
+                    type: integer
+                    format: uint32
+                pageSize:
+                    type: integer
+                    format: uint32
+                total:
+                    type: string
+        api.product.v1.ListProductReply:
+            type: object
+            properties:
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.product.v1.Product'
+                page:
+                    type: integer
+                    format: uint32
+                pageSize:
+                    type: integer
+                    format: uint32
+                total:
+                    type: string
+        api.product.v1.Product:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                status:
+                    type: integer
+                    format: int32
+                price:
+                    type: string
+                spec:
+                    $ref: '#/components/schemas/api.product.v1.ProductSpec'
+        api.product.v1.ProductSpec:
+            type: object
+            properties:
+                cpu:
+                    type: integer
+                    format: int32
+                memory:
+                    type: integer
+                    format: int32
+                gpu:
+                    type: integer
+                    format: int32
+                image:
+                    type: string
+                configJson:
+                    type: string
 tags:
-    - name: Greeter
+    - name: InstanceService
+    - name: ProductService

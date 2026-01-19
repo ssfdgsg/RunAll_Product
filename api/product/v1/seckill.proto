@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package api.product.v1;
+
+option go_package = "product/api/product/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.product.v1";
+
+// SeckillService 秒杀服务（管理员接口，仅 gRPC）
+service SeckillService {
+  // InitSeckill 初始化秒杀活动
+  rpc InitSeckill (InitSeckillReq) returns (InitSeckillReply);
+
+  // GetCurrentSeckill 获取当前秒杀信息
+  rpc GetCurrentSeckill (GetCurrentSeckillReq) returns (GetCurrentSeckillReply);
+
+  // ClearSeckill 清空秒杀数据
+  rpc ClearSeckill (ClearSeckillReq) returns (ClearSeckillReply);
+}
+
+message InitSeckillReq {
+  int64 product_id = 1;  // 秒杀商品ID
+  int32 stock = 2;       // 库存数量
+}
+
+message InitSeckillReply {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetCurrentSeckillReq {}
+
+message GetCurrentSeckillReply {
+  int64 product_id = 1;  // 当前秒杀商品ID
+  int32 stock = 2;       // 剩余库存
+  bool active = 3;       // 是否有活跃的秒杀
+}
+
+message ClearSeckillReq {}
+
+message ClearSeckillReply {
+  bool success = 1;
+  string message = 2;
+}

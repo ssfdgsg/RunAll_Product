@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package api.product.v1;
+
+option go_package = "product/api/product/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.product.v1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+
+service ProductService {
+  // List products with filters, sorting, pagination.
+  // FieldMask query format: mask.paths=name&mask.paths=spec.cpu
+  rpc ListProduct (ListProductReq) returns (ListProductReply) {
+    option (google.api.http) = { get: "/v1/products" };
+  }
+
+  // Create a new product with spec
+  rpc CreateProduct (CreateProductReq) returns (CreateProductReply) {
+    option (google.api.http) = {
+      post: "/v1/products"
+      body: "*"
+    };
+  }
+}
+
+service InstanceService {
+  // Get instance by ID
+  rpc GetInstance (GetInstanceReq) returns (GetInstanceReply) {
+    option (google.api.http) = { get: "/v1/instances/{instance_id}" };
+  }
+
+  // Get instance by order ID
+  rpc GetInstanceByOrder (GetInstanceByOrderReq) returns (GetInstanceByOrderReply) {
+    option (google.api.http) = { get: "/v1/orders/{order_id}/instance" };
+  }
+
+  // List instances with filters
+  rpc ListInstances (ListInstancesReq) returns (ListInstancesReply) {
+    option (google.api.http) = { get: "/v1/instances" };
+  }
+}
+
+message ProductSpec {
+  int32 cpu = 1;
+  int32 memory = 2;
+  int32 gpu = 3;
+  string image = 4;
+  string config_json = 5;
+}
+
+message Product {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  int32 status = 4;
+  int64 price = 5;
+  ProductSpec spec = 6;
+}
+
+enum SortBy {
+  SORT_BY_UNSPECIFIED = 0;
+  SORT_BY_PRICE = 1;
+  SORT_BY_CPU = 2;
+  SORT_BY_MEMORY = 3;
+  SORT_BY_GPU = 4;
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  ASC = 1;
+  DESC = 2;
+}
+
+message ListProductReq {
+  int64 min_price = 1;
+  int64 max_price = 2;
+  SortBy sort_by = 3;
+  SortOrder sort_order = 4;
+  uint32 page = 5;
+  uint32 page_size = 6;
+  google.protobuf.FieldMask mask = 7;
+}
+
+message ListProductReply {
+  repeated Product products = 1;
+  uint32 page = 2;
+  uint32 page_size = 3;
+  int64 total = 4;
+}
+
+message CreateProductReq {
+  string name = 1;
+  string description = 2;
+  int64 price = 3;
+  ProductSpec spec = 4;
+}
+
+message CreateProductReply {
+  Product product = 1;
+}
+
+// Instance messages
+message Instance {
+  int64 instance_id = 1;
+  string user_id = 2;
+  int64 order_id = 3;
+  int64 product_id = 4;
+  string product_name = 5;
+  ProductSpec spec = 6;
+  string status = 7;
+  int64 created_at = 8;
+}
+
+message GetInstanceReq {
+  int64 instance_id = 1;
+}
+
+message GetInstanceReply {
+  Instance instance = 1;
+}
+
+message GetInstanceByOrderReq {
+  int64 order_id = 1;
+}
+
+message GetInstanceByOrderReply {
+  Instance instance = 1;
+}
+
+message ListInstancesReq {
+  string user_id = 1;
+  string status = 2;
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+
+message ListInstancesReply {
+  repeated Instance instances = 1;
+  uint32 page = 2;
+  uint32 page_size = 3;
+  int64 total = 4;
+}

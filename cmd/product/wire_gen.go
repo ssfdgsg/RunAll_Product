@@ -7,13 +7,13 @@
 package main
 
 import (
+	"github.com/go-kratos/kratos/v2"
+	"github.com/go-kratos/kratos/v2/log"
 	"product/internal/biz"
 	"product/internal/conf"
 	"product/internal/data"
 	"product/internal/server"
 	"product/internal/service"
-	"github.com/go-kratos/kratos/v2"
-	"github.com/go-kratos/kratos/v2/log"
 )
 
 import (
@@ -28,13 +28,29 @@ func wireApp(confServer *conf.Server, confData *conf.Data, logger log.Logger) (*
 	if err != nil {
 		return nil, nil, err
 	}
-	greeterRepo := data.NewGreeterRepo(dataData, logger)
-	greeterUsecase := biz.NewGreeterUsecase(greeterRepo, logger)
-	greeterService := service.NewGreeterService(greeterUsecase)
-	grpcServer := server.NewGRPCServer(confServer, greeterService, logger)
-	httpServer := server.NewHTTPServer(confServer, greeterService, logger)
-	app := newApp(logger, grpcServer, httpServer)
+	productRepo := data.NewProductRepo(dataData, logger)
+	productUsecase := biz.NewProductUsecase(productRepo, logger)
+	productService := service.NewProductService(productUsecase, logger)
+	seckillProductRepo := data.NewSeckillProductRepo(dataData, logger)
+	seckillUsecase := biz.NewSeckillUsecase(seckillProductRepo, logger)
+	seckillService := service.NewSeckillService(seckillUsecase, logger)
+	instanceRepo := data.NewInstanceRepo(dataData, logger)
+	orderRepo := data.NewOrderRepo(dataData, logger)
+	mqPublisher, cleanup2, err := data.NewMQPublisher(confData, logger)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	instanceIDGenerator := data.NewInstanceIDGenerator(logger)
+	instanceUsecase := biz.NewInstanceUsecase(instanceRepo, orderRepo, mqPublisher, instanceIDGenerator, logger)
+	instanceService := service.NewInstanceService(instanceUsecase, logger)
+	grpcServer := server.NewGRPCServer(confServer, logger, productService, seckillService, instanceService)
+	httpServer := server.NewHTTPServer(confServer, logger, productService, instanceService)
+	redisServer := server.NewRedisServer(confData, logger)
+	v := server.NewSeckillStreamServers(confServer, redisServer, seckillUsecase, instanceUsecase, logger)
+	app := newApp(logger, grpcServer, httpServer, redisServer, v)
 	return app, func() {
+		cleanup2()
 		cleanup()
 	}, nil
 }
