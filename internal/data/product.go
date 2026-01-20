@@ -11,6 +11,39 @@ import (
 	"gorm.io/gorm"
 )
 
+// productPO 商品持久化对象
+// 商品是可售卖的套餐/SKU
+type productPO struct {
+	ID          int64     `gorm:"primaryKey;autoIncrement;column:product_id"`
+	Name        string    `gorm:"column:name;size:128;not null"`
+	Description string    `gorm:"column:description;type:text"`
+	Status      string    `gorm:"column:status;type:varchar(20);default:'ENABLED'"` // ENABLED=上架, DISABLED=下架
+	Price       int64     `gorm:"column:price;not null"`                            // 单位：分
+	SpecID      int64     `gorm:"column:spec_id;not null"`                          // 关联规格ID
+	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (productPO) TableName() string {
+	return "products"
+}
+
+// productSpecPO 商品规格持久化对象
+// 规格定义了购买商品后创建的实例的资源配置
+type productSpecPO struct {
+	ID         int64     `gorm:"primaryKey;autoIncrement;column:spec_id"`
+	CPU        int32     `gorm:"column:cpu;not null"`            // CPU 核数
+	Memory     int32     `gorm:"column:memory;not null"`         // 内存（MB）
+	GPU        int32     `gorm:"column:gpu;default:0"`           // GPU 数量
+	Image      string    `gorm:"column:image;size:255;not null"` // 容器镜像
+	ConfigJSON []byte    `gorm:"column:config_json;type:jsonb"`  // 扩展配置
+	CreatedAt  time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (productSpecPO) TableName() string {
+	return "product_specs"
+}
+
 type productRepo struct {
 	data *Data
 	log  *log.Helper
@@ -22,6 +55,45 @@ func NewProductRepo(data *Data, logger log.Logger) biz.ProductRepo {
 		data: data,
 		log:  log.NewHelper(logger),
 	}
+}
+
+// GetByID returns a product by ID with its spec.
+func (r *productRepo) GetByID(ctx context.Context, productID int64) (*biz.Product, error) {
+	var row productListRow
+	err := r.data.db.WithContext(ctx).
+		Model(&productPO{}).
+		Joins("JOIN product_specs ON product_specs.spec_id = products.spec_id").
+		Where("products.product_id = ?", productID).
+		Select(selectProductListColumns()).
+		Scan(&row).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, biz.ErrProductNotFound
+		}
+		return nil, err
+	}
+
+	product := &biz.Product{
+		ID:          row.ID,
+		Name:        row.Name,
+		Description: row.Description,
+		Status:      row.Status,
+		Price:       row.Price,
+		SpecID:      row.SpecID,
+		Spec: &biz.ProductSpec{
+			ID:         row.SpecID,
+			CPU:        row.SpecCPU,
+			Memory:     row.SpecMemory,
+			GPU:        row.SpecGPU,
+			Image:      row.SpecImage,
+			ConfigJSON: row.SpecConfigJSON,
+		},
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}
+
+	return product, nil
 }
 
 // List returns products with filters, sorting, and pagination.

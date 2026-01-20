@@ -24,7 +24,7 @@ func NewSeckillStreamServers(
 	c *conf.Server,
 	rs *RedisServer,
 	seckillUc *biz.SeckillUsecase,
-	instanceUc *biz.InstanceUsecase,
+	orderUc *biz.OrderUsecase,
 	logger log.Logger,
 ) []transport.Server {
 	helper := log.NewHelper(logger)
@@ -50,7 +50,7 @@ func NewSeckillStreamServers(
 	var servers []transport.Server
 	rdb := rs.Client()
 
-	handler := service.NewSeckillOrderService(instanceUc, productID, logger)
+	handler := service.NewSeckillOrderService(orderUc, productID, logger)
 	server := NewSeckillStreamServer(rdb, logger, handler, productID)
 	servers = append(servers, server)
 

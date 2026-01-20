@@ -9,15 +9,15 @@ import (
 
 // SeckillOrderService 秒杀订单服务
 type SeckillOrderService struct {
-	uc        *biz.InstanceUsecase
+	orderUC   *biz.OrderUsecase
 	productID int64 // 当前服务处理的商品 ID
 	log       *log.Helper
 }
 
 // NewSeckillOrderService 创建秒杀订单服务
-func NewSeckillOrderService(uc *biz.InstanceUsecase, productID int64, logger log.Logger) *SeckillOrderService {
+func NewSeckillOrderService(orderUC *biz.OrderUsecase, productID int64, logger log.Logger) *SeckillOrderService {
 	return &SeckillOrderService{
-		uc:        uc,
+		orderUC:   orderUC,
 		productID: productID,
 		log:       log.NewHelper(logger),
 	}
@@ -31,8 +31,9 @@ func (s *SeckillOrderService) HandleSeckillOrder(ctx context.Context, streamID s
 
 	// 将 streamID 转换为 int64 作为 reqID
 	reqID := hashStreamID(streamID)
-	if err := s.uc.CreateInstance(ctx, s.productID, uid, reqID); err != nil {
-		s.log.Errorf("create instance failed: %v", err)
+	_, _, err := s.orderUC.CreateOrderFromSeckill(ctx, s.productID, uid, reqID)
+	if err != nil {
+		s.log.Errorf("create order failed: %v", err)
 		return err
 	}
 	return nil

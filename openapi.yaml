@@ -6,12 +6,12 @@ info:
     title: ""
     version: 0.0.1
 paths:
-    /v1/instances:
+    /v1/orders:
         get:
             tags:
-                - InstanceService
-            description: List instances with filters
-            operationId: InstanceService_ListInstances
+                - OrderService
+            description: List user orders with filters
+            operationId: OrderService_ListOrders
             parameters:
                 - name: userId
                   in: query
@@ -37,32 +37,13 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/api.product.v1.ListInstancesReply'
-    /v1/instances/{instanceId}:
+                                $ref: '#/components/schemas/api.product.v1.ListOrdersReply'
+    /v1/orders/{orderId}:
         get:
             tags:
-                - InstanceService
-            description: Get instance by ID
-            operationId: InstanceService_GetInstance
-            parameters:
-                - name: instanceId
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/api.product.v1.GetInstanceReply'
-    /v1/orders/{orderId}/instance:
-        get:
-            tags:
-                - InstanceService
-            description: Get instance by order ID
-            operationId: InstanceService_GetInstanceByOrder
+                - OrderService
+            description: Get order by ID
+            operationId: OrderService_GetOrder
             parameters:
                 - name: orderId
                   in: path
@@ -75,7 +56,26 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/api.product.v1.GetInstanceByOrderReply'
+                                $ref: '#/components/schemas/api.product.v1.GetOrderReply'
+    /v1/orders/{orderId}/resource:
+        get:
+            tags:
+                - OrderService
+            description: Get order resource info (查询订单关联的资源信息)
+            operationId: OrderService_GetOrderResource
+            parameters:
+                - name: orderId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.product.v1.GetOrderResourceReply'
     /v1/products:
         get:
             tags:
@@ -143,6 +143,31 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/api.product.v1.CreateProductReply'
+    /v1/products/{productId}/purchase:
+        post:
+            tags:
+                - ProductService
+            description: Purchase a product (normal purchase, not seckill)
+            operationId: ProductService_PurchaseProduct
+            parameters:
+                - name: productId
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.product.v1.PurchaseProductReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.product.v1.PurchaseProductReply'
 components:
     schemas:
         api.product.v1.CreateProductReply:
@@ -161,43 +186,23 @@ components:
                     type: string
                 spec:
                     $ref: '#/components/schemas/api.product.v1.ProductSpec'
-        api.product.v1.GetInstanceByOrderReply:
+        api.product.v1.GetOrderReply:
             type: object
             properties:
-                instance:
-                    $ref: '#/components/schemas/api.product.v1.Instance'
-        api.product.v1.GetInstanceReply:
+                order:
+                    $ref: '#/components/schemas/api.product.v1.Order'
+        api.product.v1.GetOrderResourceReply:
             type: object
             properties:
-                instance:
-                    $ref: '#/components/schemas/api.product.v1.Instance'
-        api.product.v1.Instance:
+                resource:
+                    $ref: '#/components/schemas/api.product.v1.OrderResource'
+        api.product.v1.ListOrdersReply:
             type: object
             properties:
-                instanceId:
-                    type: string
-                userId:
-                    type: string
-                orderId:
-                    type: string
-                productId:
-                    type: string
-                productName:
-                    type: string
-                spec:
-                    $ref: '#/components/schemas/api.product.v1.ProductSpec'
-                status:
-                    type: string
-                createdAt:
-                    type: string
-            description: Instance messages
-        api.product.v1.ListInstancesReply:
-            type: object
-            properties:
-                instances:
+                resources:
                     type: array
                     items:
-                        $ref: '#/components/schemas/api.product.v1.Instance'
+                        $ref: '#/components/schemas/api.product.v1.OrderResource'
                 page:
                     type: integer
                     format: uint32
@@ -221,6 +226,50 @@ components:
                     format: uint32
                 total:
                     type: string
+        api.product.v1.Order:
+            type: object
+            properties:
+                orderId:
+                    type: string
+                userId:
+                    type: string
+                productId:
+                    type: string
+                reqId:
+                    type: string
+                amount:
+                    type: string
+                resourceId:
+                    type: string
+                status:
+                    type: string
+                createdAt:
+                    type: string
+                paidAt:
+                    type: string
+                completedAt:
+                    type: string
+            description: Order 订单信息
+        api.product.v1.OrderResource:
+            type: object
+            properties:
+                resourceId:
+                    type: string
+                orderId:
+                    type: string
+                userId:
+                    type: string
+                productId:
+                    type: string
+                productName:
+                    type: string
+                spec:
+                    $ref: '#/components/schemas/api.product.v1.ProductSpec'
+                status:
+                    type: string
+                createdAt:
+                    type: string
+            description: OrderResource 订单关联的资源信息
         api.product.v1.Product:
             type: object
             properties:
@@ -253,6 +302,23 @@ components:
                     type: string
                 configJson:
                     type: string
+        api.product.v1.PurchaseProductReply:
+            type: object
+            properties:
+                orderId:
+                    type: string
+                resourceId:
+                    type: string
+                status:
+                    type: string
+        api.product.v1.PurchaseProductReq:
+            type: object
+            properties:
+                productId:
+                    type: string
+                userId:
+                    type: string
 tags:
-    - name: InstanceService
+    - name: OrderService
+      description: OrderService 订单服务（包含订单关联的资源查询）
     - name: ProductService

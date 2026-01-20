@@ -1,0 +1,186 @@
+### 订单资源查询 API 测试（gRPC）
+### 基础配置
+@grpcHost = localhost:9002
+
+### 注意：资源的实际管理由资源域（Resource Domain）负责
+### 商品域只负责：
+### 1. 生成 ResourceID（即 InstanceID）
+### 2. 发送 MQ 消息给资源域
+### 3. 更新订单的 resource_id 字段
+### 以下为订单关联的资源查询接口
+
+###############################################
+### gRPC 接口测试
+###############################################
+
+### 1. 获取订单详情
+GRPC {{grpcHost}}/api.product.v1.OrderService/GetOrder
+
+{
+  "order_id": 6859826658465918960
+}
+
+### 2. 获取订单关联的资源信息
+GRPC {{grpcHost}}/api.product.v1.OrderService/GetOrderResource
+
+{
+  "order_id": 6859826658465918960
+}
+
+### 3. 获取用户订单列表
+GRPC {{grpcHost}}/api.product.v1.OrderService/ListOrders
+
+{
+  "user_id": "37c27669-00e8-44ca-80d1-b8429428bec4",
+  "page": 1,
+  "page_size": 10
+}
+
+### 4. 获取订单列表（按状态过滤 - PAID）
+GRPC {{grpcHost}}/api.product.v1.OrderService/ListOrders
+
+{
+  "user_id": "37c27669-00e8-44ca-80d1-b8429428bec4",
+  "status": "PAID",
+  "page": 1,
+  "page_size": 10
+}
+
+### 5. 获取订单列表（按状态过滤 - COMPLETED）
+GRPC {{grpcHost}}/api.product.v1.OrderService/ListOrders
+
+{
+  "user_id": "37c27669-00e8-44ca-80d1-b8429428bec4",
+  "status": "COMPLETED",
+  "page": 1,
+  "page_size": 10
+}
+
+### 6. 获取所有订单（不过滤状态）
+GRPC {{grpcHost}}/api.product.v1.OrderService/ListOrders
+
+{
+  "user_id": "37c27669-00e8-44ca-80d1-b8429428bec4",
+  "page": 1,
+  "page_size": 20
+}
+
+###############################################
+### HTTP 接口测试
+###############################################
+
+@httpHost = http://localhost:8002
+
+### 1. 获取订单详情（HTTP）
+GET {{httpHost}}/v1/orders/6859826658465918960
+
+### 2. 获取订单关联的资源信息（HTTP）
+GET {{httpHost}}/v1/orders/6859826658465918960/resource
+
+### 3. 获取用户订单列表（HTTP）
+GET {{httpHost}}/v1/orders?user_id=37c27669-00e8-44ca-80d1-b8429428bec4&page=1&page_size=10
+
+### 4. 获取订单列表（按状态过滤）
+GET {{httpHost}}/v1/orders?user_id=37c27669-00e8-44ca-80d1-b8429428bec4&status=PAID&page=1&page_size=10
+
+###############################################
+### 数据库查询测试（使用 psql）
+###############################################
+
+### 查询订单关联的资源ID
+# psql -h localhost -p 5433 -U postgres -d product
+# 
+# SELECT 
+#   order_id,
+#   user_id,
+#   product_id,
+#   instance_id as resource_id,
+#   status as order_status,
+#   amount,
+#   created_at,
+#   paid_at
+# FROM orders
+# WHERE instance_id IS NOT NULL
+# ORDER BY created_at DESC
+# LIMIT 10;
+
+### 关联查询：订单 + 商品信息
+# SELECT 
+#   o.order_id,
+#   o.user_id,
+#   p.name as product_name,
+#   o.amount,
+#   o.instance_id as resource_id,
+#   o.status as order_status,
+#   o.created_at as order_created_at,
+#   o.paid_at
+# FROM orders o
+# JOIN products p ON o.product_id = p.product_id
+# WHERE o.instance_id IS NOT NULL
+# ORDER BY o.created_at DESC
+# LIMIT 10;
+
+### 统计订单状态分布
+# SELECT 
+#   status,
+#   COUNT(*) as count,
+#   SUM(amount) as total_amount
+# FROM orders
+# GROUP BY status;
+
+### 查询特定用户的订单
+# SELECT 
+#   order_id,
+#   product_id,
+#   amount,
+#   instance_id as resource_id,
+#   status,
+#   created_at
+# FROM orders
+# WHERE user_id = '37c27669-00e8-44ca-80d1-b8429428bec4'
+# ORDER BY created_at DESC;
+
+###############################################
+### RabbitMQ 测试
+###############################################
+
+### 查看队列消息（需要安装 rabbitmqadmin）
+# rabbitmqadmin -H localhost -P 15672 -u guest -p guest list queues
+
+### 查看队列详情
+# rabbitmqadmin -H localhost -P 15672 -u guest -p guest get queue=resource.instance.created count=10
+
+### 发布测试消息（模拟商品域发送资源创建事件）
+# rabbitmqadmin -H localhost -P 15672 -u guest -p guest publish \
+#   exchange=resource.events \
+#   routing_key=instance.created \
+#   payload='{"instance_id":1234567890,"user_id":"user123","name":"测试资源","cpu":2,"memory":4096,"gpu":0,"image":"ubuntu:22.04","config_json":"{}"}'
+
+### 使用 Python 发送 MQ 消息
+# python3 << EOF
+# import pika
+# import json
+# 
+# connection = pika.BlockingConnection(pika.URLParameters('amqp://guest:guest@localhost:5673/'))
+# channel = connection.channel()
+# 
+# message = {
+#     "instance_id": 1234567890,
+#     "user_id": "user123",
+#     "name": "测试资源",
+#     "cpu": 2,
+#     "memory": 4096,
+#     "gpu": 0,
+#     "image": "ubuntu:22.04",
+#     "config_json": "{}"
+# }
+# 
+# channel.basic_publish(
+#     exchange='resource.events',
+#     routing_key='instance.created',
+#     body=json.dumps(message)
+# )
+# 
+# print("消息已发送")
+# connection.close()
+# EOF

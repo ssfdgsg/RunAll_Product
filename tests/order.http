@@ -1,0 +1,139 @@
+    ### 订单服务 API 测试（gRPC）
+### 基础配置
+@grpcHost = localhost:9002
+
+###############################################
+### gRPC 接口测试
+###############################################
+
+### 1. 正常购买商品（基础型）
+GRPC {{grpcHost}}/api.product.v1.ProductService/PurchaseProduct
+
+{
+  "product_id": 1,
+  "user_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+
+
+
+###############################################
+### 数据库查询测试（使用 psql）
+###############################################
+
+### 查询所有订单
+# psql -h localhost -p 5433 -U postgres -d product
+# 
+# SELECT 
+#   order_id,
+#   user_id,
+#   product_id,
+#   req_id,
+#   amount,
+#   instance_id,
+#   status,
+#   source,
+#   created_at,
+#   paid_at
+# FROM orders
+# ORDER BY created_at DESC
+# LIMIT 10;
+
+### 查询正常购买的订单
+# SELECT 
+#   order_id,
+#   user_id,
+#   product_id,
+#   req_id,
+#   amount,
+#   status,
+#   source,
+#   created_at
+# FROM orders
+# WHERE source = 'NORMAL'
+# ORDER BY created_at DESC;
+
+### 查询秒杀订单
+# SELECT 
+#   order_id,
+#   user_id,
+#   product_id,
+#   req_id,
+#   amount,
+#   status,
+#   source,
+#   created_at
+# FROM orders
+# WHERE source = 'SECKILL'
+# ORDER BY created_at DESC;
+
+### 查询某个用户的所有订单
+# SELECT 
+#   order_id,
+#   product_id,
+#   amount,
+#   status,
+#   source,
+#   created_at
+# FROM orders
+# WHERE user_id = '550e8400-e29b-41d4-a716-446655440000'
+# ORDER BY created_at DESC;
+
+### 关联查询：订单 + 商品信息
+# SELECT 
+#   o.order_id,
+#   o.user_id,
+#   p.name as product_name,
+#   p.price as product_price,
+#   o.amount as order_amount,
+#   o.status,
+#   o.source,
+#   o.created_at
+# FROM orders o
+# JOIN products p ON o.product_id = p.product_id
+# ORDER BY o.created_at DESC
+# LIMIT 10;
+
+### 统计订单来源分布
+# SELECT 
+#   source,
+#   status,
+#   COUNT(*) as count,
+#   SUM(amount) as total_amount
+# FROM orders
+# GROUP BY source, status
+# ORDER BY source, status;
+
+### 查询订单ID的生成规律（验证ID生成器）
+# SELECT 
+#   order_id,
+#   user_id,
+#   req_id,
+#   created_at,
+#   -- 提取时间戳部分（右移15位）
+#   (order_id >> 15) as timestamp_part,
+#   -- 提取用户哈希部分（低15位）
+#   (order_id & 32767) as uid_hash_part
+# FROM orders
+# ORDER BY created_at DESC
+# LIMIT 10;
+
+### 验证 req_id 唯一性约束
+# SELECT 
+#   product_id,
+#   req_id,
+#   COUNT(*) as count
+# FROM orders
+# GROUP BY product_id, req_id
+# HAVING COUNT(*) > 1;
+
+### 查询订单创建速率（每分钟）
+# SELECT 
+#   DATE_TRUNC('minute', created_at) as minute,
+#   source,
+#   COUNT(*) as order_count
+# FROM orders
+# WHERE created_at > NOW() - INTERVAL '1 hour'
+# GROUP BY DATE_TRUNC('minute', created_at), source
+# ORDER BY minute DESC;
+
+

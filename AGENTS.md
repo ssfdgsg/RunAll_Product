@@ -57,23 +57,24 @@ Product Service 是 RunAll 平台的商品域微服务，负责商品管理和�
 1. **快照不可变性**: 订单创建时必须保存商品快照，确保历史订单不受商品变更影响
 2. **限界上下文解耦**: 订单不直接持有 InstanceID，通过领域事件与资源域交互
 3. **金额精度安全**: 所有金额字段使用 int64（单位：分），禁止使用浮点数
+4. **订单状态管理**: 订单支持 PENDING → PAID → COMPLETED 的状态流转
 
 ### 核心概念区分
 
 - **Product (商品)**: 可售卖的套餐/SKU，定义了规格和价格，是交易的标的物
 - **Instance (实例)**: 用户购买商品后，由资源域创建的实际运行资源（K8s Pod/容器）
-- **Order (订单)**: 记录用户的购买行为，**仅在支付完成后创建**，包含两种来源：
-  - **秒杀/直接购买**：BFF 扣库存成功后，商品域消费 Stream 创建订单
-  - **正常购买**：用户支付成功后，商品域处理支付回调创建订单
+- **Order (订单)**: 记录用户的购买行为，支持两种流程：
+  - **秒杀/直接购买**：BFF 扣库存成功后，商品域消费 Stream 创建订单（PENDING），支付后更新为 PAID
+  - **正常购买**：用户下单创建订单（PENDING），支付成功后更新为 PAID
 
 ### 订单来源与 req_id 的使用
 
 | 来源 | 支付时机 | req_id 生成方式 | 用途 | 订单状态 |
 |------|---------|----------------|------|---------|
-| 秒杀/直接购买 | BFF 扣库存时已完成 | Redis INCR（BFF层） | 幂等性控制，防止重复抢购 | 直接 PAID |
-| 正常购买 | 用户主动支付 | 随机生成（雪花ID等） | 防止订单重复 | 直接 PAID |
+| 秒杀/直接购买 | BFF 扣库存时已完成 | Redis INCR（BFF层） | 幂等性控制，防止重复抢购 | 先 PENDING 后 PAID |
+| 正常购买 | 用户主动支付 | 随机生成（雪花ID等） | 防止订单重复 | 先 PENDING 后 PAID |
 
-**重要**：两种场景都是支付完成后才创建订单，不存在 PENDING 状态的订单。
+**重要**：订单创建时为 PENDING 状态，支付成功后更新为 PAID。
 
 ### Product (商品聚合根)
 
@@ -82,8 +83,8 @@ Product Service 是 RunAll 平台的商品域微服务，负责商品管理和�
 | ProductID | int64 | 主键（雪花ID） |
 | Name | string | 商品名称（如"基础型实例"、"GPU计算型"） |
 | Description | string | 商品描述 |
-| Status | enum | ENABLED / DISABLED（上下架状态） |
-| Spec | ProductSpec | 商品规格配置（定义实例的资源配置） |
+| Status | string | ENABLED / DISABLED（上下架状态） |
+| SpecID | int64 | 关联的规格ID |
 | Price | int64 | 商品价格（单位：分） |
 | CreatedAt | time | 创建时间 |
 | UpdatedAt | time | 更新时间 |
@@ -94,41 +95,46 @@ Product Service 是 RunAll 平台的商品域微服务，负责商品管理和�
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
+| SpecID | int64 | 规格ID（主键） |
 | CPU | int | CPU 核数 |
-| Memory | int | 内存大小（单位：MB） |
-| GPU | *GPUSpec | GPU 配置（可为 null） |
+| Memory | int | 内存大小（单位：GB） |
+| GPU | *int | GPU 配置（可为 null） |
 | Image | string | 容器镜像（如 "ubuntu:22.04"） |
-| BillingCycle | enum | 计费周期：MONTHLY / YEARLY / PAY_AS_YOU_GO |
 | ConfigJSON | json | 扩展配置（磁盘、网络等） |
+| CreatedAt | time | 创建时间 |
+| UpdatedAt | time | 更新时间 |
 
-### GPUSpec (值对象)
+### ProductSnapshot (值对象 - 订单内嵌)
+
+订单创建时保存的商品快照，确保历史订单不受商品变更影响。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| Model | string | GPU 型号（如 "A100", "V100"） |
-| Count | int | GPU 数量 |
+| ProductID | int64 | 原商品ID（仅供追溯） |
+| Name | string | 下单时的商品名称 |
+| Price | int64 | 下单时的单价（分） |
+| Spec | ProductSpec | 下单时的配置快照 |
 
 ### Order (订单聚合根)
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| OrderID | int64 | 订单唯一标识（雪花ID） |
-| UserID | int64 | 用户ID（关联 User Domain） |
+| ID | int64 | 订单ID（主键，雪花ID，对应 order_id） |
+| UserID | string | 用户ID（UUID） |
 | ProductID | int64 | 商品ID |
 | ReqID | int64 | 请求号（秒杀：Redis INCR；正常购买：随机生成），与 ProductID 组成唯一索引 |
-| ProductSnapshot | ProductSnapshot | 下单时的商品快照（不可变） |
-| TotalAmount | int64 | 订单总价（单位：分） |
-| Status | enum | PAID（已支付） / COMPLETED（已完成） / CANCELLED（已取消） |
-| Source | enum | SECKILL（秒杀/直接购买） / NORMAL（正常购买） |
-| CreatedAt | time | 创建时间（即支付完成时间） |
-| UpdatedAt | time | 更新时间 |
-| PaidAt | time | 支付时间（与 CreatedAt 相同） |
+| Amount | int64 | 订单金额（单位：分） |
+| InstanceID | *int64 | 资源实例ID（支付后填充，可为 null） |
+| Status | string | PENDING（待支付） / PAID（已支付） / COMPLETED（已完成） / CANCELLED（已取消） |
+| CreatedAt | time | 创建时间 |
+| PaidAt | *time | 支付时间（可为 null） |
 | CompletedAt | *time | 完成时间（可为 null） |
-| CancelledAt | *time | 取消时间（可为 null） |
 
-**注意**：订单仅在支付完成后创建，不存在 PENDING 状态。
+**注意**：根据实际数据库设计，订单支持 PENDING 状态，允许先创建订单后支付的场景。
 
 ### ProductSnapshot (值对象 - 订单内嵌)
+
+订单创建时保存的商品快照，确保历史订单不受商品变更影响。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -185,28 +191,30 @@ Product Service 是 RunAll 平台的商品域微服务，负责商品管理和�
 ```sql
 -- 商品规格表（值对象，不可变）
 CREATE TABLE product_specs (
-    id BIGSERIAL NOT NULL,
-    cpu INT NOT NULL COMMENT 'CPU 核数',
-    memory INT NOT NULL COMMENT '内存（MB）',
-    gpu INT DEFAULT 0 COMMENT 'GPU 数量',
-    image VARCHAR(255) NOT NULL COMMENT '容器镜像',
-    config_json JSONB COMMENT '扩展配置',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (id)
+    spec_id BIGSERIAL NOT NULL,
+    cpu INT NOT NULL COMMENT '核心数',
+    memory INT NOT NULL COMMENT '内存(GB)',
+    gpu INT COMMENT 'GPU型号/核心数',
+    image VARCHAR(255) NOT NULL COMMENT '镜像ID或名称',
+    config_json JSONB COMMENT '扩展配置(磁盘类型、带宽等)',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (spec_id)
 );
 
 -- 商品表
 CREATE TABLE products (
-    id BIGSERIAL NOT NULL,
-    name VARCHAR(128) NOT NULL COMMENT '商品名称',
+    product_id BIGSERIAL NOT NULL,
+    name VARCHAR(255) NOT NULL COMMENT '套餐名称',
     description TEXT COMMENT '商品描述',
-    status SMALLINT DEFAULT 1 COMMENT '1-启用 0-禁用',
-    price BIGINT NOT NULL COMMENT '价格（分）',
+    status VARCHAR(20) DEFAULT 'ENABLED' NOT NULL COMMENT 'ENABLED-启用 DISABLED-禁用',
+    price BIGINT NOT NULL COMMENT '单价（分）',
     spec_id BIGINT NOT NULL COMMENT '关联规格ID',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (id),
-    FOREIGN KEY (spec_id) REFERENCES product_specs(id)
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (product_id),
+    FOREIGN KEY (spec_id) REFERENCES product_specs(spec_id),
+    CONSTRAINT products_status_check CHECK (status IN ('ENABLED', 'DISABLED'))
 );
 
 CREATE INDEX idx_products_spec_id ON products(spec_id);
@@ -214,66 +222,27 @@ CREATE INDEX idx_products_status ON products(status);
 
 -- 订单表
 CREATE TABLE orders (
-    id BIGINT NOT NULL,
-    user_id UUID NOT NULL COMMENT '用户ID',
+    order_id BIGINT NOT NULL,
+    user_id UUID COMMENT '用户ID',
     product_id BIGINT NOT NULL COMMENT '商品ID',
-    req_id BIGINT NOT NULL COMMENT '请求号（秒杀：Redis INCR；正常购买：随机生成）',
+    req_id BIGINT NOT NULL DEFAULT 0 COMMENT '请求号（秒杀：Redis INCR；正常购买：随机生成）',
     amount BIGINT NOT NULL COMMENT '订单金额（分）',
-    instance_id BIGINT COMMENT '实例ID（创建后填充）',
-    status SMALLINT NOT NULL DEFAULT 0 COMMENT '0-待支付 1-已支付 2-已取消 3-已完成',
-    source VARCHAR(20) NOT NULL DEFAULT 'NORMAL' COMMENT 'SECKILL-秒杀/直接购买 NORMAL-正常购买',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
+    instance_id BIGINT COMMENT '资源实例ID,支付后填充',
+    status VARCHAR(20) DEFAULT 'PENDING' NOT NULL COMMENT 'PENDING-待支付 PAID-已支付 CANCELLED-已取消 COMPLETED-已完成',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
     paid_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_product_req (product_id, req_id),
-    FOREIGN KEY (product_id) REFERENCES products(id)
+    PRIMARY KEY (order_id),
+    CONSTRAINT uq_orders_product_req UNIQUE (product_id, req_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id),
+    CONSTRAINT orders_status_check CHECK (status IN ('PENDING', 'PAID', 'CANCELLED', 'COMPLETED'))
 );
 
 CREATE INDEX idx_orders_user_id ON orders(user_id);
 CREATE INDEX idx_orders_product_id ON orders(product_id);
-CREATE INDEX idx_orders_instance_id ON orders(instance_id);
+CREATE INDEX idx_orders_instance_id ON orders(instance_id) WHERE instance_id IS NOT NULL;
 CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_orders_source ON orders(source);
 
--- 实例创建日志表（由资源域管理）
--- 商品域不直接操作此表，仅通过 MQ 消息触发资源域写入
-CREATE TABLE instance_logs (
-    id BIGSERIAL NOT NULL,
-    product_id BIGINT NOT NULL COMMENT '商品ID',
-    user_id UUID NOT NULL COMMENT '用户ID',
-    instance_id BIGINT NOT NULL COMMENT '实例ID',
-    source VARCHAR(20) NOT NULL COMMENT '来源：SECKILL / ORDER',
-    source_id VARCHAR(64) NOT NULL COMMENT '来源ID',
-    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSING',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (id)
-);
-
-CREATE INDEX idx_instance_logs_product_id ON instance_logs(product_id);
-CREATE INDEX idx_instance_logs_user_id ON instance_logs(user_id);
-CREATE INDEX idx_instance_logs_instance_id ON instance_logs(instance_id);
-CREATE INDEX idx_instance_logs_source ON instance_logs(source);
-CREATE INDEX idx_instance_logs_source_id ON instance_logs(source_id);
-
--- 秒杀商品配置表
-CREATE TABLE seckill_products (
-    id BIGINT NOT NULL,
-    product_id BIGINT NOT NULL COMMENT '关联的商品ID',
-    status SMALLINT NOT NULL DEFAULT 1 COMMENT '1-启用 0-禁用',
-    stock INT NOT NULL DEFAULT 0 COMMENT '库存数量',
-    start_time TIMESTAMPTZ NOT NULL COMMENT '秒杀开始时间',
-    end_time TIMESTAMPTZ NOT NULL COMMENT '秒杀结束时间',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(64) COMMENT '创建人（管理员ID）',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_product_id (product_id)
-);
-
-CREATE INDEX idx_seckill_status ON seckill_products(status);
-CREATE INDEX idx_seckill_time ON seckill_products(start_time, end_time);
 ```
 
 `product_specs.config_json` 字段示例：
@@ -295,25 +264,31 @@ CREATE INDEX idx_seckill_time ON seckill_products(start_time, end_time);
    └─ 推送到 Redis Stream {uid, req_id, product_id}
 2. 商品域消费 Stream
    ├─ 生成 order_id 和 instance_id
-   ├─ 创建订单 (status=PAID, source=SECKILL, req_id=Redis值)
+   ├─ 创建订单 (status=PENDING, req_id=Redis值)
+   └─ 等待支付回调
+3. 支付成功后
+   ├─ 更新订单状态为 PAID
    └─ 发送 MQ 消息到资源域
-3. 资源域监听 MQ → 创建实例 → 回调更新 orders (status=COMPLETED)
+4. 资源域监听 MQ → 创建实例 → 回调更新 orders (status=COMPLETED)
 ```
 
 **正常购买流程**：
 ```
-1. 用户支付成功 → 支付回调
-2. 商品域处理支付回调
+1. 用户下单
    ├─ 生成 req_id（随机大数）
-   ├─ 生成 order_id 和 instance_id
-   ├─ 创建订单 (status=PAID, source=NORMAL, req_id=随机值)
+   ├─ 生成 order_id
+   └─ 创建订单 (status=PENDING, req_id=随机值)
+2. 用户支付成功 → 支付回调
+3. 商品域处理支付回调
+   ├─ 更新订单状态为 PAID
+   ├─ 生成 instance_id
    └─ 发送 MQ 消息到资源域
-3. 资源域监听 MQ → 创建实例 → 回调更新 orders (status=COMPLETED)
+4. 资源域监听 MQ → 创建实例 → 回调更新 orders (status=COMPLETED)
 ```
 
 **关键点**：
-- 两种场景都是**支付完成后**才创建订单记录
-- 订单创建时 status 直接为 PAID（不存在 PENDING 状态）
+- 两种场景都是**先创建订单（PENDING）**，支付成功后更新为 PAID
+- 订单创建时 status 为 PENDING，支付后更新为 PAID
 - req_id 的唯一区别：秒杀用 Redis INCR，正常购买用随机大数
 
 ---

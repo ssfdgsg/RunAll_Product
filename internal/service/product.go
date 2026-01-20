@@ -14,22 +14,39 @@ import (
 // ProductService implements product APIs.
 type ProductService struct {
 	v1.UnimplementedProductServiceServer
-	uc  *biz.ProductUsecase
-	log *log.Helper
+	productUC *biz.ProductUsecase
+	orderUC   *biz.OrderUsecase
+	log       *log.Helper
+}
+
+// OrderService implements order APIs.
+type OrderService struct {
+	v1.UnimplementedOrderServiceServer
+	orderUC *biz.OrderUsecase
+	log     *log.Helper
 }
 
 // NewProductService creates a ProductService.
-func NewProductService(uc *biz.ProductUsecase, logger log.Logger) *ProductService {
+func NewProductService(productUC *biz.ProductUsecase, orderUC *biz.OrderUsecase, logger log.Logger) *ProductService {
 	return &ProductService{
-		uc:  uc,
-		log: log.NewHelper(logger),
+		productUC: productUC,
+		orderUC:   orderUC,
+		log:       log.NewHelper(logger),
+	}
+}
+
+// NewOrderService creates an OrderService.
+func NewOrderService(orderUC *biz.OrderUsecase, logger log.Logger) *OrderService {
+	return &OrderService{
+		orderUC: orderUC,
+		log:     log.NewHelper(logger),
 	}
 }
 
 // ListProduct lists products with filters, sorting, and pagination.
 func (s *ProductService) ListProduct(ctx context.Context, req *v1.ListProductReq) (*v1.ListProductReply, error) {
 	filter := s.buildFilter(req)
-	products, total, err := s.uc.ListProducts(ctx, filter)
+	products, total, err := s.productUC.ListProducts(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -65,13 +82,29 @@ func (s *ProductService) CreateProduct(ctx context.Context, req *v1.CreateProduc
 		},
 	}
 
-	if err := s.uc.CreateProduct(ctx, product); err != nil {
+	if err := s.productUC.CreateProduct(ctx, product); err != nil {
 		s.log.Errorf("create product failed: %v", err)
 		return nil, err
 	}
 
 	return &v1.CreateProductReply{
 		Product: toProductProto(product),
+	}, nil
+}
+
+// PurchaseProduct handles normal product purchase (not seckill).
+func (s *ProductService) PurchaseProduct(ctx context.Context, req *v1.PurchaseProductReq) (*v1.PurchaseProductReply, error) {
+	order, resourceID, err := s.orderUC.PurchaseProduct(ctx, req.GetUserId(), req.GetProductId())
+	if err != nil {
+		s.log.Errorf("purchase product failed: user_id=%s, product_id=%d, err=%v",
+			req.GetUserId(), req.GetProductId(), err)
+		return nil, err
+	}
+
+	return &v1.PurchaseProductReply{
+		OrderId:    order.ID,
+		ResourceId: resourceID,
+		Status:     order.Status,
 	}, nil
 }
 
@@ -253,4 +286,110 @@ func hasSpecField(paths map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// ============================================================================
+// 订单查询 API
+// ============================================================================
+
+// GetOrder 获取订单详情
+func (s *OrderService) GetOrder(ctx context.Context, req *v1.GetOrderReq) (*v1.GetOrderReply, error) {
+	order, err := s.orderUC.GetOrderByID(ctx, req.GetOrderId())
+	if err != nil {
+		s.log.Errorf("get order failed: orderID=%d err=%v", req.GetOrderId(), err)
+		return nil, err
+	}
+
+	return &v1.GetOrderReply{
+		Order: toOrderProto(order),
+	}, nil
+}
+
+// GetOrderResource 获取订单关联的资源信息
+func (s *OrderService) GetOrderResource(ctx context.Context, req *v1.GetOrderResourceReq) (*v1.GetOrderResourceReply, error) {
+	resource, err := s.orderUC.GetInstanceByOrder(ctx, req.GetOrderId())
+	if err != nil {
+		s.log.Errorf("get order resource failed: orderID=%d err=%v", req.GetOrderId(), err)
+		return nil, err
+	}
+
+	return &v1.GetOrderResourceReply{
+		Resource: toOrderResourceProto(resource),
+	}, nil
+}
+
+// ListOrders 查询用户订单列表
+func (s *OrderService) ListOrders(ctx context.Context, req *v1.ListOrdersReq) (*v1.ListOrdersReply, error) {
+	filter := biz.InstanceFilter{
+		UserID:   req.GetUserId(),
+		Status:   req.GetStatus(),
+		Page:     req.GetPage(),
+		PageSize: req.GetPageSize(),
+	}
+
+	resources, total, err := s.orderUC.ListInstances(ctx, filter)
+	if err != nil {
+		s.log.Errorf("list orders failed: err=%v", err)
+		return nil, err
+	}
+
+	protoResources := make([]*v1.OrderResource, 0, len(resources))
+	for _, resource := range resources {
+		protoResources = append(protoResources, toOrderResourceProto(resource))
+	}
+
+	return &v1.ListOrdersReply{
+		Resources: protoResources,
+		Page:      filter.Page,
+		PageSize:  filter.PageSize,
+		Total:     total,
+	}, nil
+}
+
+// toOrderProto 转换为 proto 订单对象
+func toOrderProto(order *biz.Order) *v1.Order {
+	protoOrder := &v1.Order{
+		OrderId:    order.ID,
+		UserId:     order.UserID,
+		ProductId:  order.ProductID,
+		ReqId:      order.ReqID,
+		Amount:     order.Amount,
+		ResourceId: order.InstanceID,
+		Status:     order.Status,
+		CreatedAt:  order.CreatedAt.Unix(),
+	}
+
+	if order.PaidAt != nil {
+		protoOrder.PaidAt = order.PaidAt.Unix()
+	}
+	if order.CompletedAt != nil {
+		protoOrder.CompletedAt = order.CompletedAt.Unix()
+	}
+
+	return protoOrder
+}
+
+// toOrderResourceProto 转换为 proto 订单资源对象
+func toOrderResourceProto(info *biz.InstanceInfo) *v1.OrderResource {
+	protoResource := &v1.OrderResource{
+		ResourceId:  info.InstanceID,
+		OrderId:     info.OrderID,
+		UserId:      info.UserID,
+		ProductId:   info.ProductID,
+		ProductName: info.ProductName,
+		Status:      info.Status,
+		CreatedAt:   info.CreatedAt.Unix(),
+	}
+
+	if info.Spec != nil {
+		protoResource.Spec = &v1.ProductSpec{
+			Cpu:        info.Spec.CPU,
+			Memory:     info.Spec.Memory,
+			Gpu:        info.Spec.GPU,
+			Image:      info.Spec.Image,
+			ConfigJson: string(info.Spec.ConfigJSON),
+		}
+	}
+
+	return protoResource
 }

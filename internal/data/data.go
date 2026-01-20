@@ -19,7 +19,9 @@ var ProviderSet = wire.NewSet(
 	NewOrderRepo,
 	NewMQPublisher,
 	NewInstanceIDGenerator,
+	NewOrderIDGenerator,
 	NewSeckillProductRepo,
+	NewOrderRepoImpl,
 )
 
 // Data .

@@ -23,22 +23,31 @@ service ProductService {
       body: "*"
     };
   }
+
+  // Purchase a product (normal purchase, not seckill)
+  rpc PurchaseProduct (PurchaseProductReq) returns (PurchaseProductReply) {
+    option (google.api.http) = {
+      post: "/v1/products/{product_id}/purchase"
+      body: "*"
+    };
+  }
 }
 
-service InstanceService {
-  // Get instance by ID
-  rpc GetInstance (GetInstanceReq) returns (GetInstanceReply) {
-    option (google.api.http) = { get: "/v1/instances/{instance_id}" };
+// OrderService 订单服务（包含订单关联的资源查询）
+service OrderService {
+  // Get order by ID
+  rpc GetOrder (GetOrderReq) returns (GetOrderReply) {
+    option (google.api.http) = { get: "/v1/orders/{order_id}" };
   }
 
-  // Get instance by order ID
-  rpc GetInstanceByOrder (GetInstanceByOrderReq) returns (GetInstanceByOrderReply) {
-    option (google.api.http) = { get: "/v1/orders/{order_id}/instance" };
+  // Get order resource info (查询订单关联的资源信息)
+  rpc GetOrderResource (GetOrderResourceReq) returns (GetOrderResourceReply) {
+    option (google.api.http) = { get: "/v1/orders/{order_id}/resource" };
   }
 
-  // List instances with filters
-  rpc ListInstances (ListInstancesReq) returns (ListInstancesReply) {
-    option (google.api.http) = { get: "/v1/instances" };
+  // List user orders with filters
+  rpc ListOrders (ListOrdersReq) returns (ListOrdersReply) {
+    option (google.api.http) = { get: "/v1/orders" };
   }
 }
 
@@ -101,43 +110,68 @@ message CreateProductReply {
   Product product = 1;
 }
 
-// Instance messages
-message Instance {
-  int64 instance_id = 1;
+message PurchaseProductReq {
+  int64 product_id = 1;
   string user_id = 2;
-  int64 order_id = 3;
-  int64 product_id = 4;
-  string product_name = 5;
-  ProductSpec spec = 6;
-  string status = 7;
+}
+
+message PurchaseProductReply {
+  int64 order_id = 1;
+  int64 resource_id = 2; // 资源ID（由资源域管理）
+  string status = 3;
+}
+
+// Order 订单信息
+message Order {
+  int64 order_id = 1;
+  string user_id = 2;
+  int64 product_id = 3;
+  int64 req_id = 4;
+  int64 amount = 5;
+  int64 resource_id = 6; // 资源ID（支付后填充）
+  string status = 7; // PENDING, PAID, COMPLETED, CANCELLED
   int64 created_at = 8;
+  int64 paid_at = 9;
+  int64 completed_at = 10;
 }
 
-message GetInstanceReq {
-  int64 instance_id = 1;
+// OrderResource 订单关联的资源信息
+message OrderResource {
+  int64 resource_id = 1; // 资源ID
+  int64 order_id = 2;    // 订单ID
+  string user_id = 3;    // 用户ID
+  int64 product_id = 4;  // 商品ID
+  string product_name = 5; // 商品名称
+  ProductSpec spec = 6;    // 资源规格
+  string status = 7;       // 资源状态（CREATING, RUNNING, STOPPED, DELETED）
+  int64 created_at = 8;    // 创建时间
 }
 
-message GetInstanceReply {
-  Instance instance = 1;
-}
-
-message GetInstanceByOrderReq {
+message GetOrderReq {
   int64 order_id = 1;
 }
 
-message GetInstanceByOrderReply {
-  Instance instance = 1;
+message GetOrderReply {
+  Order order = 1;
 }
 
-message ListInstancesReq {
+message GetOrderResourceReq {
+  int64 order_id = 1;
+}
+
+message GetOrderResourceReply {
+  OrderResource resource = 1;
+}
+
+message ListOrdersReq {
   string user_id = 1;
-  string status = 2;
+  string status = 2; // 订单状态过滤
   uint32 page = 3;
   uint32 page_size = 4;
 }
 
-message ListInstancesReply {
-  repeated Instance instances = 1;
+message ListOrdersReply {
+  repeated OrderResource resources = 1; // 返回订单关联的资源信息
   uint32 page = 2;
   uint32 page_size = 3;
   int64 total = 4;

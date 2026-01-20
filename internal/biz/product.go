@@ -50,6 +50,7 @@ type ProductFilter struct {
 
 // ProductRepo provides access to products for listing.
 type ProductRepo interface {
+	GetByID(ctx context.Context, productID int64) (*Product, error)
 	List(ctx context.Context, filter ProductFilter) ([]*Product, int64, error)
 	Create(ctx context.Context, product *Product) error
 }
