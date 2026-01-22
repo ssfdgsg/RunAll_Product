@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"strings"
+	
 	"product/internal/biz"
 
 	"github.com/go-kratos/kratos/v2/log"
@@ -33,6 +35,12 @@ func (s *SeckillOrderService) HandleSeckillOrder(ctx context.Context, streamID s
 	reqID := hashStreamID(streamID)
 	_, _, err := s.orderUC.CreateOrderFromSeckill(ctx, s.productID, uid, reqID)
 	if err != nil {
+		// 检查是否是唯一约束冲突（订单已存在）
+		if isUniqueViolationError(err) {
+			s.log.Warnf("order already exists (idempotent): streamID=%s uid=%s reqID=%d", streamID, uid, reqID)
+			// 订单已存在，视为成功，返回 nil 以便 ACK 消息
+			return nil
+		}
 		s.log.Errorf("create order failed: %v", err)
 		return err
 	}
@@ -50,4 +58,15 @@ func hashStreamID(streamID string) int64 {
 		hash = -hash
 	}
 	return hash
+}
+
+// isUniqueViolationError 检查是否是唯一约束冲突错误
+func isUniqueViolationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "23505") || 
+	       strings.Contains(errMsg, "duplicate key") || 
+	       strings.Contains(errMsg, "uq_orders_product_req")
 }

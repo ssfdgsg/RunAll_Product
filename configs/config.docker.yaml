@@ -1,0 +1,24 @@
+server:
+  http:
+    addr: 0.0.0.0:8002
+    timeout: 1s
+  grpc:
+    addr: 0.0.0.0:9002
+    timeout: 1s
+data:
+  database:
+    driver: postgresql
+    # 数据库在宿主机，使用 host.docker.internal
+    source: postgresql://postgres:123456@host.docker.internal:5433/product
+  redis:
+    # Redis 容器名为 product，在同一网络中直接使用容器名
+    addr: product:6379
+    password: ""
+    db: 0
+    read_timeout: 0.2s
+    write_timeout: 0.2s
+  rabbitmq:
+    # RabbitMQ 容器名为 resource，在同一网络中直接使用容器名
+    url: amqp://guest:guest@resource:5672/
+    queue: resource.instance.created
+    exchange: resource.events

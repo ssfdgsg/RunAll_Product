@@ -1,6 +1,6 @@
 ### 商品服务 API 测试（gRPC）
 ### 基础配置
-@grpcHost = localhost:9002
+@grpcHost = 127.0.0.1:9002
 
 ###############################################
 ### gRPC 接口测试
@@ -120,12 +120,12 @@ GRPC {{grpcHost}}/api.product.v1.ProductService/ListProduct
 GRPC {{grpcHost}}/api.product.v1.ProductService/CreateProduct
 
 {
-  "name": "轻量型实例",
-  "description": "适合轻量级应用",
+  "name": "超轻量型实例",
+  "description": "适合超轻量级应用",
   "price": "5500",
   "spec": {
     "cpu": 1,
-    "memory": 512,
+    "memory": 256,
     "gpu": 0,
     "image": "ubuntu:22.04",
     "config_json": "{\"disk_type\":\"SSD\",\"disk_size\":50}"

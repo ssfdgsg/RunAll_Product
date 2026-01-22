@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+CHANGELOG_REQ_ID.md
+INSTANCE_CREATION.md
+SECKILL_INTEGRATION.md
+SECKILL_MQ_FLOW.md
+SECKILL_REDIS_DESIGN.md
+DATABASE_SCHEMA.md
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Build artifacts
+bin/
+*.exe
+product.exe
+
+# Tests
+tests/
+*_test.go
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+tmp/
+.DS_Store

@@ -10,8 +10,8 @@
 GRPC {{grpcHost}}/api.product.v1.ProductService/PurchaseProduct
 
 {
-  "product_id": 1,
-  "user_id": "550e8400-e29b-41d4-a716-446655440000"
+  "product_id": 5,
+  "user_id": "550e8400-e29b-41d4-a716-446655440001"
 }
 
 
